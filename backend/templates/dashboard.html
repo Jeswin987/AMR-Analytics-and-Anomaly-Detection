@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Real-time monitoring and analytics dashboard for AMR (Autonomous Mobile Robot) fleet operations.">
+    <title>AMR Fleet Analytics Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="/static/js/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">⏳ Loading data...</div>
+
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>🤖 AMR Fleet Analytics Dashboard</h1>
+        <p>Real-time monitoring and analytics for autonomous mobile robots</p>
+    </div>
+
+    <!-- Filter / Control Bar -->
+    <div class="main-filter-bar">
+        <div class="filter-group">
+            <span class="filter-label">🤖 Select Device:</span>
+            <select id="deviceSelector" class="filter-select" onchange="onDeviceChange()">
+                <option value="">Loading devices...</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <span class="filter-label">🎯 Select Mission:</span>
+            <select id="missionSelector" class="filter-select" onchange="onMissionChange()">
+                <option value="ALL">All Missions (Device Overview)</option>
+            </select>
+        </div>
+        <div class="filter-group date-range-group">
+            <span class="filter-label">📅 Date Range:</span>
+            <input type="date" id="startDate" class="filter-date" title="Start date">
+            <span class="date-sep">→</span>
+            <input type="date" id="endDate" class="filter-date" title="End date">
+            <button class="load-range-btn" onclick="loadDateRange()" title="Load missions for this date range">Load</button>
+            <button class="clear-range-btn" onclick="clearDateRange()" title="Clear date range and use auto-window">✕</button>
+        </div>
+        <span id="viewModeBadge" class="view-mode-badge">📊 Device Overview</span>
+        <span id="dateRangeLabel" class="date-range-label" style="display:none;"></span>
+        <button id="refreshBtn" class="refresh-btn" onclick="refreshDevice()">🔄 Refresh</button>
+    </div>
+
+    <!-- Summary KPI Cards -->
+    <div class="summary-cards" id="summaryCards"></div>
+
+    <!-- Mission Detail Card (shown only in mission view) -->
+    <div id="missionInfoCard" class="mission-info-card" style="display:none;"></div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('utilization', this)">📊 Utilization &amp; Idle Time</button>
+        <button class="tab" onclick="switchTab('performance', this)">✅ Task Performance</button>
+        <button class="tab" onclick="switchTab('battery', this)">🔋 Battery &amp; Energy</button>
+    </div>
+
+    <!-- TAB: Utilization -->
+    <div id="utilization" class="tab-content active">
+        <div class="charts-grid" id="utilizationChartsGrid">
+            <div class="chart-container">
+                <h2>Fleet Utilization Overview</h2>
+                <canvas id="utilizationChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>Hourly Utilization Trend (24h)</h2>
+                <canvas id="utilizationTrendChart"></canvas>
+            </div>
+        </div>
+        <div class="card" >
+            <h2 id="utilizationDetailsTitle">Robot Utilization Details</h2>
+            <!-- Mission view: metric blocks -->
+            <div id="utilizationContent" style="display:none;"></div>
+            <!-- Device overview: telemetry table -->
+            <table id="utilizationTable" style="display:table;">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Device ID</th>
+                        <th>Status</th>
+                        <th>Battery %</th>
+                        <th>Speed</th>
+                        <th>Driving</th>
+                        <th>Zone</th>
+                        <th>Last Node</th>
+                        <th>Operating Mode</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB: Task Performance -->
+    <div id="performance" class="tab-content">
+        <div class="charts-grid" id="performanceChartsGrid">
+            <div class="chart-container">
+                <h2>Task Success Rates</h2>
+                <canvas id="taskSuccessChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>Task Completion Timeline</h2>
+                <canvas id="taskTimelineChart"></canvas>
+            </div>
+        </div>
+        <div class="card" id="missionIntelligencePanel">
+            <h2>Task Performance Details</h2>
+            <table id="performanceTable">
+                <thead>
+                    <tr>
+                        <th>Mission Name</th>
+                        <th>Device ID</th>
+                        <th>Status</th>
+                        <th>Distance (m)</th>
+                        <th>Waypoints Done</th>
+                        <th>Total Waypoints</th>
+                        <th>Started At</th>
+                        <th>Completed At</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- TAB: Battery & Energy -->
+    <div id="battery" class="tab-content">
+        <div class="charts-grid" id="batteryChartsGrid">
+            <div class="chart-container">
+                <h2>Hourly Battery Drain (%)</h2>
+                <p class="chart-subtitle">Cumulative discharge % per hour during active mission periods</p>
+                <canvas id="batteryDrainChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h2>Battery Level Over Time (%)</h2>
+                <p class="chart-subtitle">Average state-of-charge per hour — shows charge/discharge curve</p>
+                <canvas id="batteryLevelChart"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <h2>Battery &amp; Energy Details</h2>
+            <!-- Mission view: metric blocks -->
+            <div id="batteryContent" style="display:none;"></div>
+            <!-- Device overview: battery table -->
+            <table id="batteryTable" style="display:table;">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Device ID</th>
+                        <th>Battery %</th>
+                        <th>Status</th>
+                        <th>Speed</th>
+                        <th>Zone</th>
+                        <th>Last Node</th>
+                        <th>Charge Cycles</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+</div><!-- /container -->
+
+<!-- External JS loaded last so DOM is ready -->
+<script src="/static/js/dashboard.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,22 @@
+# requirements.txt — AMR Fleet Analytics Dashboard
+# Install with: pip install -r requirements.txt
+
+# Web framework
+flask>=2.3.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Database — PostgreSQL (relational: missions, schedulers)
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# Database — InfluxDB (time-series: telemetry)
+influxdb-client>=1.36.0
+
+# Timezone support
+pytz>=2023.3
+
+# Environment variable loading
+python-dotenv>=1.0.0

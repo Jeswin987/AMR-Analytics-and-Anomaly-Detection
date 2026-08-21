@@ -1,0 +1,11 @@
+feature_1,feature_2,pearson_r,abs_r,severity
+duration_efficiency,duration_minutes,0.9972,0.9972,HIGH
+avg_speed_ms,duration_minutes,-0.978,0.978,HIGH
+avg_speed_ms,duration_efficiency,-0.9747,0.9747,HIGH
+avg_speed_ms,speed_stddev,-0.911,0.911,HIGH
+duration_minutes,distance_m,0.9032,0.9032,HIGH
+duration_efficiency,distance_m,0.8915,0.8915,MODERATE
+avg_speed_ms,distance_m,-0.8448,0.8448,MODERATE
+distance_efficiency,distance_m,0.8429,0.8429,MODERATE
+speed_stddev,duration_efficiency,0.8398,0.8398,MODERATE
+speed_stddev,duration_minutes,0.8356,0.8356,MODERATE

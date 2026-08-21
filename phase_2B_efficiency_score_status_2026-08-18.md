@@ -1,0 +1,255 @@
+# Phase 2B — Per-Robot Efficiency Score: Status & Pause Rationale
+**Date:** 2026-08-18
+**Status:** Paused — 3 of 4 required inputs resolved; `battery_efficiency` blocked on data
+**Author:** Jeswin (with technical guidance, not implementation authorship, from Claude)
+
+---
+
+## Background
+
+The efficiency score formula (4 inputs, each weighted 25%, combined into a 0–100
+composite) was originally proposed by the Trizlabz team during the internship.
+The team became unavailable before providing precise definitions for each input
+or the reasoning behind the equal weighting. This document records the
+investigation done to independently define and validate each input against
+real fleet data, and explains why the phase is paused rather than completed
+with placeholder assumptions.
+
+**Approach taken:** validate-and-justify, not blind implementation. Each input
+was checked against real PostgreSQL/InfluxDB data for all 3 fleet devices
+before being accepted, rather than assumed from the formula's description alone.
+
+**Note on data revisions:** an earlier draft of this document used mission
+counts (37 / 4 / 3) pulled from `load_data_for_device()`'s rolling 24-hour
+window, which is not the same thing as each device's full mission history.
+Those numbers were mistaken for device totals and have been corrected below
+using direct, unwindowed queries against `mission_executions`.
+
+**Fleet data — full mission history, no time-window filtering:**
+| Device | deviceId (short) | Completed | Cancelled | Pending | Total |
+|---|---|---|---|---|---|
+| AMR12601071239XCR | `0f12e514` | 263 | 570 | 38 | 871 |
+| AMR12512170906BGI | `421ec268` | 0 | 7 | 0 | 7 |
+| AMR12512300747UGW | `f1f193bb` | 0 | 4 | 0 | 4 |
+
+**Confirmed status set:** only `completed`, `cancelled`, `pending` exist in
+this dataset. There is no `failed` status — an earlier draft of the
+`completion_rate` formula assumed one existed and has been corrected.
+
+---
+
+## Input 1: `completion_rate` — RESOLVED
+
+**Key finding: not all cancellations are the same, and treating them
+uniformly was the wrong approach.** A follow-up query split each device's
+cancelled missions by whether `startedAt` was recorded:
+
+| Device | Cancelled — never started | Cancelled — started, then stopped |
+|---|---|---|
+| XCR (`0f12e514`) | 539 | 31 |
+| BGI (`421ec268`) | 0 | 7 |
+| UGW (`f1f193bb`) | 0 | 4 |
+
+This is a real, evidence-backed distinction, not a judgment call:
+- **Never-started cancellations** (dispatch/scheduling decisions made before
+  the robot moved) are not attributable to the robot and should not count
+  against it.
+- **Started-then-cancelled missions** (the robot was mid-mission when
+  stopped) represent a real, attributable non-completion and should count
+  against the robot, the same way a `failed` status would if one existed.
+
+For XCR, the two categories are wildly different in size (539 vs. 31) — a
+formula that doesn't distinguish them would either unfairly punish XCR for
+539 missions it was never actually asked to complete, or (if cancellations
+are excluded entirely, as an earlier draft did) collapse the metric to a
+meaningless 100%-or-undefined result for every device, since with no `failed`
+status, excluding all cancellations leaves only `completed / completed`.
+
+**Formula:**
+```python
+def compute_completion_rate(completed, cancelled_after_start):
+    eligible = completed + cancelled_after_start
+    # Missions cancelled before startedAt was ever set are excluded —
+    # they were never actually assigned to run, so the robot has no
+    # attributable outcome for them.
+    if eligible == 0:
+        return None  # insufficient data
+    return completed / eligible
+```
+
+**Why `None`, not `0`, when eligible = 0:** returning `0` would falsely imply
+"this robot completed none of its assigned work." `None` must be explicitly
+handled downstream — the device is flagged as data-insufficient, not scored
+as a hard failure.
+
+**Result on real, full-history data:**
+| Device | completed | cancelled (started) | eligible | completion_rate |
+|---|---|---|---|---|
+| XCR | 263 | 31 | 294 | **89.5%** |
+| BGI | 0 | 7 | 7 | **0%** |
+| UGW | 0 | 4 | 4 | **0%** |
+
+**Note:** XCR's eligible count (294) matches the "294 usable XCR missions"
+figure referenced in Phase 2A's feature-extraction work. This is very likely
+not a coincidence — Phase 2A's dataset-construction step probably applied an
+equivalent "mission actually started" filter. Worth confirming against the
+Phase 2A scripts if/when this needs to be cited precisely, but the two
+figures reconciling independently is a good sign the underlying reasoning is
+consistent across both phases.
+
+**All 3 devices now produce a real, computable `completion_rate`.** BGI and
+UGW's 0% is not a data-insufficiency flag in this version — every one of
+their cancellations happened after the mission started, so 0% is a real,
+attributable result, not a missing value.
+
+---
+
+## Input 2: `battery_efficiency` — BLOCKED, not implemented
+
+**What was tried:** initial proposal was `battery_efficiency = battery_health`,
+since `battery_health` is already a bounded 0–100 field already present in
+the codebase (`transform_battery()` in `trizlabz_transformer.py`).
+
+**Why this was rejected:** inspection of `BatteryTransformer.transform()`
+source code and its own docstring revealed:
+
+> `battery_health: approximated as average SOC (%) over the window. This is
+> NOT true degradation health... Treat as "average charge level" until a
+> proper health model is implemented.`
+
+`battery_health` is the average battery percentage during the observed
+window — not a measure of efficiency, degradation, or performance. A robot
+that sits idle at 100% charge all day scores `battery_health = 100`. A robot
+that is actually working — cycling through charge and discharge to perform
+missions — will show a *lower* average simply because it spends time below
+100%, regardless of how well it performs.
+
+**Confirmed on real data (24h-window snapshot):** the 2 low-activity devices
+both showed `battery_health: 100.0%, drain: 0.0%, cycles: 0`. XCR showed
+`battery_health: 53.44%, drain: 127.0% (cumulative across 2 charge cycles)`.
+Using `battery_health` directly as `battery_efficiency` would score the two
+less-active robots as maximally "efficient" and XCR — the device that
+actually did real work — as the *least* efficient. That's the inverse of the
+intended meaning.
+
+**What a correct definition would require:** a formula normalizing battery
+drain against work performed (e.g., `working_hours / battery_drain_pct`, or
+similar), which needs a calibration constant or reference range to produce
+a meaningful 0–100 score. With only 1 device showing substantial real
+drain/cycle activity in the window examined, there is no basis to calibrate
+such a constant — any number chosen now would be invented, not derived,
+repeating the exact problem this validate-and-justify approach is meant to
+avoid.
+
+**Status: not implemented.** Requires either (a) more devices with real
+operational history (or a longer window for the existing 3) to establish a
+normalization range, or (b) the original team's intended definition, which
+is currently unavailable.
+
+---
+
+## Inputs 3 & 4: `active_ratio` / `idle_ratio` — RESOLVED
+
+**Initial assumption rejected:** the obvious choice was to reuse
+`utilization_rate` from the existing `transform_utilization()` function.
+Rejected because that function operates on whatever window
+`fetch_dashboard_data()` passes in — a rolling 24h window (with a fallback to
+"most recent 24h with data" when empty) — the same window-scoping issue that
+initially produced wrong numbers for `completion_rate`. Using it directly
+would give each device an `active_ratio` measured over an arbitrary,
+non-comparable slice of its history rather than a stable, fleet-wide metric.
+
+**Second attempt also rejected:** computing elapsed time as
+`now - first_started` (i.e., from the robot's first-ever mission to today)
+produces near-zero ratios for all 3 devices (0.0003%–0.14%), because the
+denominator is dominated by the months since the internship/project paused —
+calendar time with no missions running, not the robots being inefficient.
+This would have been a repeat of the earlier `completion_rate` mistake:
+letting an unrelated time span silently distort a per-robot metric.
+
+**Formula (final):**
+```python
+def compute_active_ratio(working_seconds, first_started, last_completed):
+    elapsed_seconds = (last_completed - first_started).total_seconds()
+    if elapsed_seconds <= 0:
+        return None
+    return min(1.0, working_seconds / elapsed_seconds)
+
+# idle_ratio = 1 - active_ratio
+```
+
+**Definition:** fraction of each robot's own observed operational span
+(first mission started → last mission completed) during which it was
+physically active (`completed` + `cancelled-after-start` mission durations,
+excluding the existing >24h anomaly filter — consistent with
+`PHYSICAL_STATUSES` in `trizlabz_transformer.py`). Bounding elapsed time to
+the robot's own first/last activity — rather than to "now" — measures
+behavior during the period it was actually being run, not calendar time
+including the project's pause.
+
+**Result on real, full-history data:**
+| Device | First activity | Last activity | Elapsed | Working seconds | `active_ratio` |
+|---|---|---|---|---|---|
+| XCR (`0f12e514`) | 2026-02-26 | 2026-03-10 | ~11.9 days | 20,317.4s | **1.98%** |
+| BGI (`421ec268`) | 2025-12-17 | 2025-12-18 | ~24.2h | 13,261.6s | **15.21%** |
+| UGW (`f1f193bb`) | 2025-12-31 | 2026-02-26 | ~56.6 days | 57.7s | **0.0012%** |
+
+**Note on interpretation:** all 3 devices show low activity even within their
+own operational spans. This is consistent with the data being pilot/test
+data collected during an internship, not a continuously-operating production
+fleet — it should not be read as "these robots are inefficient" without that
+context. Worth stating explicitly if this number is presented on its own.
+
+**All 3 devices now produce a real, computable `active_ratio`/`idle_ratio`.**
+
+---
+
+## Why Phase 2B is paused, not partially shipped
+
+Of the 4 required inputs:
+- `completion_rate` — **resolved**, computable and evidence-backed for all 3 devices
+- `active_ratio` / `idle_ratio` — **resolved**, computable and evidence-backed for all 3 devices
+- `battery_efficiency` — **blocked**, no defensible formula without more data
+
+3 of 4 inputs are now fully defined and validated against real, full-history
+data. `battery_efficiency` is the sole remaining blocker. Given the formula
+was specified by the team as a 4-input, equally-weighted composite, shipping
+a 3-input substitute (or filling the 4th with an invented value) would
+misrepresent the deliverable rather than honestly reflect its state.
+Documenting the blocker precisely — rather than guessing a value to force a
+number out — is the more defensible outcome, consistent with the
+validate-and-justify approach used throughout this phase and Phase 2A.
+
+## Resumption criteria
+
+Phase 2B can resume when either:
+1. **More devices with real, varied operational history** become available,
+   or the existing devices accumulate more activity — enough to calibrate a
+   `battery_efficiency` normalization against real drain-vs-work data.
+2. **The original team returns** and can clarify their intended definition
+   for `battery_efficiency` and the rationale for equal 25% weighting —
+   at which point this document's independent definitions can be compared
+   against theirs and reconciled.
+
+Once `battery_efficiency` is resolved, the scoring function itself is a
+short remaining step — 3 of 4 input definitions are done, and the
+definition work has been the majority of what's left in this phase.
+
+## Known limitations to state explicitly if asked (viva/interview)
+
+- Efficiency score formula's weighting (25% each) was proposed by the team,
+  not empirically derived or validated — with only 3 devices, there isn't
+  enough variance in real data to statistically check whether equal
+  weighting is appropriate.
+- `completion_rate` required distinguishing "cancelled before starting" from
+  "cancelled after starting" — the dataset does not label this directly, it
+  was derived by checking whether `startedAt` was populated. This is a
+  reasoned inference, not a value the schema states outright.
+- `battery_health`, as currently implemented in the codebase, measures
+  average charge level, not battery degradation or efficiency — this was a
+  pre-existing mislabeling in the transformer layer, not something
+  introduced in this phase, but it was caught during Phase 2B investigation.
+- An earlier working draft of this analysis used mission counts from a
+  24-hour query window and mistook them for device totals; this was caught
+  and corrected using direct, unwindowed queries before finalizing the
+  `completion_rate` formula.

@@ -1,0 +1,35 @@
+{
+  "model_version": "v1_hybrid_phase2a",
+  "trained_at_utc": "2026-07-29T09:31:55.065679+00:00",
+  "sklearn_version": "1.9.0",
+  "if_features": [
+    "avg_speed_ms",
+    "speed_stddev",
+    "pct_time_moving",
+    "distance_efficiency",
+    "duration_efficiency",
+    "distance_m",
+    "hour_of_day"
+  ],
+  "feature_caps": {
+    "physical_obstruction_score": 444.6,
+    "connectivity_failure_score": 22.0,
+    "duration_efficiency": 14.48,
+    "distance_m": 13.96
+  },
+  "contamination": 0.15,
+  "n_estimators": 100,
+  "random_state": 42,
+  "scaler_fit_rows": 292,
+  "scaler_excluded_mission_ids": [
+    "20f0e64b-51d8-4c9f-9920-73d083343233",
+    "13f8f98a-be41-4129-9d61-035fc680d318"
+  ],
+  "scaler_excluded_reason": "zero telemetry_readings and zero distance_m \u2014 no speed data to fit on",
+  "training_rows": 208,
+  "if_thresholds": {
+    "normal_max": 0.55,
+    "warning_max": 0.75
+  },
+  "if_score_convention": "if_score = -model.score_samples(X); higher means more anomalous (original Isolation Forest paper convention, not sklearn's sign)."
+}

@@ -1,0 +1,161 @@
+
+=================================================================
+  SETUP: Load CSV and compute composite features
+=================================================================
+Loading ml_features_v3.csv...
+  Total XCR missions : 294
+  Baseline missions  : 208
+
+=================================================================
+  CHECK 1: Null values in 12 features within 208 baseline
+=================================================================
+Checking each of the 12 features for nulls in the 208 baseline missions:
+
+  ✓ avg_speed_ms                       : 0 nulls
+  ✓ max_speed_ms                       : 0 nulls
+  ✓ speed_stddev                       : 0 nulls
+  ✓ pct_time_moving                    : 0 nulls
+  ✓ distance_efficiency                : 0 nulls
+  ✓ duration_efficiency                : 0 nulls
+  ✓ physical_obstruction_score         : 0 nulls
+  ✓ connectivity_failure_score         : 0 nulls
+  ✓ has_escalation                     : 0 nulls
+  ✓ duration_minutes                   : 0 nulls
+  ✓ distance_m                         : 0 nulls
+  ✓ hour_of_day                        : 0 nulls
+
+  ✓ RESULT: Zero nulls across all 12 features in the 208 baseline
+    Training script will not crash on null values
+
+=================================================================
+  CHECK 2: Outlier Detection — will extreme values break the scaler?
+=================================================================
+Checking for extreme outliers in each feature across ALL 294 XCR missions
+(Outliers in non-baseline missions affect how the scaler compresses the range)
+
+  avg_speed_ms                       : min=0.00 | p95=0.37 | max=0.38 | max/p95=1.0x
+  max_speed_ms                       : min=0.00 | p95=0.53 | max=1.00 | max/p95=1.9x
+  speed_stddev                       : min=0.00 | p95=0.21 | max=0.28 | max/p95=1.3x
+  pct_time_moving                    : min=0.00 | p95=93.93 | max=96.08 | max/p95=1.0x
+  distance_efficiency                : min=0.00 | p95=1.01 | max=2.47 | max/p95=2.4x
+  duration_efficiency                : min=0.05 | p95=5.75 | max=17853.76 | max/p95=3103.7x ← EXTREME OUTLIER
+  physical_obstruction_score         : min=0.00 | p95=120.35 | max=6796.00 | max/p95=56.5x ← EXTREME OUTLIER
+  connectivity_failure_score         : min=0.00 | p95=0.35 | max=74.00 | max/p95=211.4x ← EXTREME OUTLIER
+  has_escalation                     : min=0.00 | p95=1.00 | max=1.00 | max/p95=1.0x
+  duration_minutes                   : min=0.02 | p95=4.24 | max=8569.01 | max/p95=2020.7x ← EXTREME OUTLIER
+  distance_m                         : min=0.00 | p95=16.42 | max=253.15 | max/p95=15.4x ← EXTREME OUTLIER
+  hour_of_day                        : min=11.00 | p95=17.00 | max=18.00 | max/p95=1.1x
+
+  Recommendation for features with max/p95 > 5:
+  → Cap values at 99th percentile before scaling (clip outliers)
+  → This prevents the outlier mission from compressing all other values
+
+  Effect of capping at 99th percentile:
+  physical_obstruction_score         : p99=460.14 | 3 missions would be capped
+  connectivity_failure_score         : p99=22.07 | 3 missions would be capped
+  duration_efficiency                : p99=22.02 | 3 missions would be capped
+  duration_minutes                   : p99=13.12 | 3 missions would be capped
+
+=================================================================
+  CHECK 3: Lock the exact 208 baseline mission IDs
+=================================================================
+Verifying the exact filtering logic produces exactly 208 missions...
+
+  Filter steps:
+  Start — all XCR missions                     : 294
+  After mission_name == 'Mar5'                 : 234
+  After status == 'completed'                  : 223
+  After total_error_events == 0                : 208
+  After duration_minutes < 200                 : 208
+
+  ✓ Confirmed: filter produces exactly 208 missions without duration cap
+  ✓ Saved: baseline_208_mission_ids.csv (208 rows)
+    This file is the authoritative source for training data
+    Training script must use these exact mission IDs
+
+  Date distribution of the 208 baseline missions:
+    2026-03-05: 83 missions
+    2026-03-06: 125 missions
+
+=================================================================
+  CHECK 4: Duration efficiency baseline average
+=================================================================
+Checking duration_efficiency in the 208 baseline missions:
+
+  Count with data : 208 / 208
+  Mean            : 1.8219
+  Median          : 2.0974
+  Std             : 0.4358
+  Min             : 0.8767
+  Max             : 2.4717
+  25th percentile : 1.3074
+  75th percentile : 2.1883
+  95th percentile : 2.3073
+
+  ✗ FINDING: Baseline median duration_efficiency is 2.10
+    This means even clean normal missions take 2x+ their estimated time
+    The model_metadata.json baseline average should reflect this
+    Do NOT assume 1.0 = normal for this feature
+    Correct baseline average to use: 1.8219
+
+  What this means for anomaly detection:
+  Normal is ~2.1x estimated duration
+  Missions should be flagged when duration_efficiency > 2.3
+  (95th percentile of normal = 2.31)
+
+  Full baseline averages for model_metadata.json:
+    avg_speed_ms                       : 0.2765
+    max_speed_ms                       : 0.5000
+    speed_stddev                       : 0.1891
+    pct_time_moving                    : 89.2867
+    distance_efficiency                : 0.9651
+    duration_efficiency                : 1.8219
+    physical_obstruction_score         : 0.0000
+    connectivity_failure_score         : 0.0000
+    has_escalation                     : 0.0000
+    duration_minutes                   : 0.6362
+    distance_m                         : 9.9983
+    hour_of_day                        : 15.8846
+
+=================================================================
+  CHECK 5: Feature extractor consistency — spot check 3 missions
+=================================================================
+Comparing CSV feature values against fresh single-mission extraction
+for 3 missions from the baseline...
+
+  Selected 2 test missions for spot check
+  Mission 1: b4a3a2ad... | 2026-03-05 | 16:13:02
+  Feature                             CSV value       Fresh extract   Match?
+  ---------------------------------------------------------------------------
+  avg_speed_ms                        0.1862          None            ✗ one null
+  max_speed_ms                        0.5             None            ✗ one null
+  speed_stddev                        0.2212          0.0             ✗ DIFFER
+  pct_time_moving                     73.21           None            ✗ one null
+  distance_efficiency                 0.9466          0.9466          ✓
+  duration_efficiency                 2.4717          2.4717          ✓
+  physical_obstruction_score          0               0               ✓
+  connectivity_failure_score          0               0               ✓
+  has_escalation                      0               0               ✓
+  duration_minutes                    0.914           0.914           ✓
+  distance_m                          10.504          10.504          ✓
+  hour_of_day                         16              16              ✓
+
+  ✗ Mission 1: Differences found — investigate before building scorer
+
+  Mission 2: 39752cab... | 2026-03-06 | 11:22:41
+  Feature                             CSV value       Fresh extract   Match?
+  ---------------------------------------------------------------------------
+  avg_speed_ms                        0.34            None            ✗ one null
+  max_speed_ms                        0.5             None            ✗ one null
+  speed_stddev                        0.1829          0.0             ✗ DIFFER
+  pct_time_moving                     89.29           None            ✗ one null
+  distance_efficiency                 0.933           0.933           ✓
+  duration_efficiency                 1.3357          1.3357          ✓
+  physical_obstruction_score          0               0               ✓
+  connectivity_failure_score          0               0               ✓
+  has_escalation                      0               0               ✓
+  duration_minutes                    0.431           0.431           ✓
+  distance_m                          9.024           9.024           ✓
+  hour_of_day                         11              11              ✓
+
+  ✗ Mission 2: Differences found — investigate before building scorer

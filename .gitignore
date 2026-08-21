@@ -1,0 +1,67 @@
+# .gitignore — AMR Fleet Analytics Dashboard
+
+# ── Secrets & environment ─────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.installed.cfg
+*.manifest
+*.spec
+
+# ── Virtual environments ──────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ── IDE / editors ──────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# ── OS ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Data files (large, managed separately — see README for how to
+#    regenerate) ────────────────────────────────────────────────
+Data/*.csv
+Data/*.json
+ml_features_v3.csv
+anomaly_scores_294.csv
+
+# ── Trained ML artifacts (large binaries — regenerate locally via
+#    train_model.py rather than committing; see README) ──────────
+backend/ml/*.pkl
+
+# ── Jupyter / notebooks (if any exploratory notebooks exist) ──────
+.ipynb_checkpoints/
+
+# ── Testing / coverage ─────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Node (if any frontend tooling is added later) ──────────────────
+node_modules/

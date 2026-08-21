@@ -1,0 +1,40 @@
+=================================================================
+EDA SUMMARY — AMR Phase 2 Feature Analysis
+=================================================================
+
+Robot         : AMR12601071239XCR
+Total missions: 294
+After duration filter (<200 min): 292
+Primary missions (Mar5 + DemoMission): 270
+
+── Section 1: Dataset Overview ──
+  Mission types     : Test(6), TestETbLine3(17), Mar5(234), DemoMission(37)
+  Completion rate   : 89.5%
+  Missions w/ errors: 17.5% of XCR missions
+  Duration range    : 0.02 – 22.3 min
+  Battery range     : 13% – 86%
+
+── Section 2: Error Analysis ──
+  Escalation rate (all XCR)  : 8.9% of missions
+  Avg SOB01 (when present)   : 52.3
+  Avg OES01 (when present)   : 63.2
+  Duration vs error corr     : r=0.88, p=0.0000
+  Mar5 avg errors            : 9.8
+  DemoMission avg errors     : 10.5
+
+── Section 3: Performance & Anomaly Signals ──
+  Mar5 avg speed     : 0.2607 m/s
+  DemoMission avg spd: 0.2142 m/s
+  Anomalous missions (|z|>2 on error_count, Mar5): 7
+  Key correlations (Mar5+Demo):
+    error_count vs duration_minutes: r=0.88
+    error_count vs distance_m: r=0.14
+    error_count vs sob01_count: r=0.96
+    error_count vs oes01_count: r=0.77
+
+── Section 4: Battery Analysis ──
+  Battery range (XCR)  : 13% – 86%
+  Overall SOC trend    : -0.0181% per mission (negative = draining)
+  Direct drain samples : 4 missions
+  Mean drain/km        : 15.8102%/km
+  NOTE: avg_battery=0 for Mar5 missions (interpolated source, battery at 0% not real)
