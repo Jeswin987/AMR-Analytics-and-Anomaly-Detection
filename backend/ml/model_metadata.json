@@ -1,6 +1,6 @@
 {
   "model_version": "v1_hybrid_phase2a",
-  "trained_at_utc": "2026-07-29T09:31:55.065679+00:00",
+  "trained_at_utc": "2026-08-21T12:29:48.395648+00:00",
   "sklearn_version": "1.9.0",
   "if_features": [
     "avg_speed_ms",
