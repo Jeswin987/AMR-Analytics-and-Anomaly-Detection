@@ -1,4 +1,4 @@
-# requirements.txt — AMR Fleet Analytics Dashboard
+# requirements.txt — AMR Fleet Analytics & Anomaly Detection
 # Install with: pip install -r requirements.txt
 
 # Web framework
@@ -7,6 +7,10 @@ flask>=2.3.0
 # Data processing
 pandas>=2.0.0
 numpy>=1.24.0
+
+# Machine learning — anomaly detection pipeline (anomaly_pipeline/)
+scikit-learn>=1.3.0
+joblib>=1.3.0
 
 # Database — PostgreSQL (relational: missions, schedulers)
 sqlalchemy>=2.0.0
