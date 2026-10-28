@@ -162,11 +162,11 @@ The analytics service includes a detailed changelog in its module docstring docu
 
 `.env` contains a full InfluxDB API token:
 ```
-INFLUX_TOKEN=Yy6UI1Jwtra1S0xbgNPdtPv79HMNWep3FnTOVhTj2Hi1o2EASmAfN6F45jSNdykMRYkWnKnl1F6IV6vECmf2pA==
+INFLUX_TOKEN=<redacted>
 ```
-While `.env` is in `.gitignore` (confirmed at line 4), the token is still on disk in plaintext and could be leaked via backups, screenshots, or accidental commits. The PostgreSQL password (`root`) is hardcoded as a fallback default in `config.py` line 33 and `postgres.py` line 19.
+While `.env` is in `.gitignore` (confirmed at line 4), the token is still on disk in plaintext and could be leaked via backups, screenshots, or accidental commits.
 
-**Files:** [`.env`](file:///c:/Users/VICTUS/AMR-Analytics_app_V2/.env#L2), [`config.py`](file:///c:/Users/VICTUS/AMR-Analytics_app_V2/backend/config.py#L33) (line 33), [`postgres.py`](file:///c:/Users/VICTUS/AMR-Analytics_app_V2/postgres.py#L19) (line 19).
+**Files:** [`.env`](file:///c:/Users/VICTUS/AMR-Analytics_app_V2/.env#L2), [`config.py`](file:///c:/Users/VICTUS/AMR-Analytics_app_V2/backend/config.py#L33) (line 33)
 
 ### 2. **SQL injection in `postgres.py:migrate_csv_to_postgres()`**
 
