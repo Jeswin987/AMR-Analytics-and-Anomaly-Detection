@@ -34,6 +34,15 @@ function switchTab(tabName, btn) {
 }
 
 // ── Formatters ────────────────────────────────────────────────────────────────
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getStatusClass(status) {
     if (!status) return 'status-warning';
     const s = status.toUpperCase();
@@ -135,7 +144,7 @@ async function loadDevice(deviceId, forceRefresh = false) {
             lbl.style.display = 'none';
         }
     } catch (e) {
-        setHTML('summaryCards', `<div class="no-data">⚠️ ${e.message}</div>`, true);
+        setHTML('summaryCards', `<div class="no-data">⚠️ ${escapeHtml(e.message)}</div>`, true);
     } finally {
         state.loadingDevice = false;
         showLoading(false);
@@ -285,10 +294,10 @@ function renderOverview(data) {
     setHTML('#utilizationTable tbody',
         (data.telemetry_rows || []).length
             ? (data.telemetry_rows || []).map(r => `<tr>
-                <td>${r.timestamp ?? ''}</td><td>${r.deviceId ?? ''}</td><td>${r.status ?? ''}</td>
-                <td>${r.battery !== null && r.battery !== undefined ? r.battery : ''}</td>
-                <td>${fmtSpeed(r.speed)}</td><td>${fmtDriving(r.driving)}</td>
-                <td>${r.zoneId ?? ''}</td><td>${r.lastNodeId ?? ''}</td><td>${r.operatingMode ?? ''}</td>
+                <td>${escapeHtml(r.timestamp ?? '')}</td><td>${escapeHtml(r.deviceId ?? '')}</td><td>${escapeHtml(r.status ?? '')}</td>
+                <td>${escapeHtml(r.battery !== null && r.battery !== undefined ? r.battery : '')}</td>
+                <td>${escapeHtml(fmtSpeed(r.speed))}</td><td>${escapeHtml(fmtDriving(r.driving))}</td>
+                <td>${escapeHtml(r.zoneId ?? '')}</td><td>${escapeHtml(r.lastNodeId ?? '')}</td><td>${escapeHtml(r.operatingMode ?? '')}</td>
               </tr>`).join('')
             : '<tr><td colspan="9" style="text-align:center;color:#999;">No telemetry data available</td></tr>');
 
@@ -335,11 +344,11 @@ function renderOverview(data) {
     setHTML('#performanceTable tbody',
         (data.mission_rows || []).length
             ? (data.mission_rows || []).map(r => `<tr>
-                <td>${r.missionName || ''}</td><td>${r.deviceId || ''}</td>
-                <td><span class="status-badge ${getStatusClass(r.status)}">${(r.status || '').toUpperCase()}</span></td>
+                <td>${escapeHtml(r.missionName || '')}</td><td>${escapeHtml(r.deviceId || '')}</td>
+                <td><span class="status-badge ${getStatusClass(r.status)}">${escapeHtml((r.status || '').toUpperCase())}</span></td>
                 <td>${fmtDistance(r.distanceTravelled)}</td>
-                <td>${r.completedWaypoints || ''}</td><td>${r.totalWaypoints || ''}</td>
-                <td>${r.startedAt || ''}</td><td>${r.completedAt || ''}</td><td>${r.error || ''}</td>
+                <td>${escapeHtml(r.completedWaypoints || '')}</td><td>${escapeHtml(r.totalWaypoints || '')}</td>
+                <td>${escapeHtml(r.startedAt || '')}</td><td>${escapeHtml(r.completedAt || '')}</td><td>${escapeHtml(r.error || '')}</td>
               </tr>`).join('')
             : '<tr><td colspan="9" style="text-align:center;color:#999;">No missions found</td></tr>');
 
@@ -483,10 +492,10 @@ function renderOverview(data) {
                 ? 'rgba(46,204,113,0.8)' : r.battery > 30
                 ? 'rgba(241,196,15,0.8)' : 'rgba(231,76,60,0.8)';
             return `<tr>
-                <td>${r.timestamp || ''}</td><td>${r.deviceId || ''}</td>
-                <td><div class="progress-bar"><div class="progress-fill" style="width:${r.battery || 0}%;background:${bc}"></div></div>${r.battery || ''}%</td>
-                <td>${r.status || ''}</td><td>${r.speed || ''}</td>
-                <td>${r.zoneId || ''}</td><td>${r.lastNodeId || ''}</td>
+                <td>${escapeHtml(r.timestamp || '')}</td><td>${escapeHtml(r.deviceId || '')}</td>
+                <td><div class="progress-bar"><div class="progress-fill" style="width:${Number(r.battery) || 0}%;background:${bc}"></div></div>${escapeHtml(r.battery || '')}%</td>
+                <td>${escapeHtml(r.status || '')}</td><td>${escapeHtml(r.speed || '')}</td>
+                <td>${escapeHtml(r.zoneId || '')}</td><td>${escapeHtml(r.lastNodeId || '')}</td>
                 <td><span class="charge-cycles-badge">⚡ ${r.charge_cycles_today || 0}</span></td>
             </tr>`;
         }).join('')
@@ -519,8 +528,8 @@ function renderMission(mData) {
     // Summary cards
     const robotName = mData.device_name || mData.device_id || '';
     document.getElementById('summaryCards').innerHTML = `
-        <div class="card"><h3>Mission Name</h3><div class="value" style="font-size:20px;">${missionName}</div><div class="label">Selected Mission</div></div>
-        <div class="card"><h3>Status</h3><div class="value"><span class="status-badge ${getStatusClass(mission.status)}">${(mission.status || 'N/A').toUpperCase()}</span></div><div class="label">Mission Status</div></div>
+        <div class="card"><h3>Mission Name</h3><div class="value" style="font-size:20px;">${escapeHtml(missionName)}</div><div class="label">Selected Mission</div></div>
+        <div class="card"><h3>Status</h3><div class="value"><span class="status-badge ${getStatusClass(mission.status)}">${escapeHtml((mission.status || 'N/A').toUpperCase())}</span></div><div class="label">Mission Status</div></div>
         <div class="card"><h3>Distance</h3><div class="value">${dist}m</div><div class="label">Traveled</div></div>
         <div class="card"><h3>Waypoints</h3><div class="value">${mission.completedWaypoints || 0}/${mission.totalWaypoints || 0}</div><div class="label">Completed</div></div>
         <div class="card"><h3>Duration</h3><div class="value">${duration}</div>
@@ -542,10 +551,10 @@ function renderMission(mData) {
         <div class="mission-info-grid">
             <div class="mission-info-item"><label>Started At</label><div class="value">${fmtTimestamp(mission.startedAt)}</div></div>
             <div class="mission-info-item"><label>Completed At</label><div class="value">${mission.completedAt ? fmtTimestamp(mission.completedAt) : 'Running...'}</div></div>
-            <div class="mission-info-item"><label>Robot</label><div class="value">${robotName || mission.deviceId || 'N/A'}</div></div>
-            <div class="mission-info-item"><label>Last Zone</label><div class="value">${lastZone}</div></div>
-            <div class="mission-info-item"><label>Final Mode</label><div class="value">${lastMode}</div></div>
-            <div class="mission-info-item"><label>Error</label><div class="value">${mission.error || 'None'}</div></div>
+            <div class="mission-info-item"><label>Robot</label><div class="value">${escapeHtml(robotName || mission.deviceId || 'N/A')}</div></div>
+            <div class="mission-info-item"><label>Last Zone</label><div class="value">${escapeHtml(lastZone)}</div></div>
+            <div class="mission-info-item"><label>Final Mode</label><div class="value">${escapeHtml(lastMode)}</div></div>
+            <div class="mission-info-item"><label>Error</label><div class="value">${escapeHtml(mission.error || 'None')}</div></div>
         </div>
     `;
 
@@ -707,7 +716,7 @@ function renderMissionIntelligence(telemetry, mission, battery, durationSec, dis
                         <div class="error-event-row">
                             <span class="error-time">${fmtTimestamp(r.timestamp)}</span>
                             <span class="error-codes">
-                                ${r.errors.map(e => `<span class="error-badge">${e}</span>`).join(' ')}
+                                ${r.errors.map(e => `<span class="error-badge">${escapeHtml(e)}</span>`).join(' ')}
                             </span>
                         </div>
                     `).join('')}
@@ -729,7 +738,7 @@ function renderMissionIntelligence(telemetry, mission, battery, durationSec, dis
                         <div class="mode-event">
                             <div class="mode-dot ${getModeClass(mc.mode)}"></div>
                             <div class="mode-info">
-                                <div class="mode-name">${mc.mode}</div>
+                                <div class="mode-name">${escapeHtml(mc.mode)}</div>
                                 <div class="mode-time">${fmtTimestamp(mc.timestamp)}</div>
                             </div>
                             ${i < modeChanges.length - 1 ? '<div class="mode-line"></div>' : ''}
