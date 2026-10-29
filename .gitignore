@@ -65,3 +65,5 @@ htmlcov/
 
 # ── Node (if any frontend tooling is added later) ──────────────────
 node_modules/
+*.bak
+patch_*.py

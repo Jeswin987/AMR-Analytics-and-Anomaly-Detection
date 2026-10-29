@@ -624,6 +624,7 @@ class AnalyticsService:
         # Built lazily on first access, cached for session lifetime
         self._device_name_map: Dict[str, str]             = {}
         self._cache_lock = threading.Lock()
+        self._last_key: Dict[str, str] = {}
         self._in_progress: set = set()
         
 
@@ -873,7 +874,6 @@ from(bucket: "device_core")
             with self._cache_lock:
                 self._cache[cache_key] = result
                 self._raw_cache[cache_key] = raw
-                self._last_key = getattr(self, '_last_key', {})
                 self._last_key[device_id] = cache_key
             return result
         finally:
@@ -881,8 +881,8 @@ from(bucket: "device_core")
                 self._in_progress.discard(cache_key)
 
     def fetch_mission_data(self, device_id, mission_index):
-        self._last_key = getattr(self, '_last_key', {})
-        cache_key = self._last_key.get(device_id, device_id)
+        with self._cache_lock:
+            cache_key = self._last_key.get(device_id, device_id)
 
         
         with self._cache_lock:

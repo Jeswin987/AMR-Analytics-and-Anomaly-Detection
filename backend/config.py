@@ -68,5 +68,5 @@ class Config:
     # FLASK
     # ============================================
     DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() in ('true', '1', 'yes')
-    HOST  = os.getenv('FLASK_HOST', '0.0.0.0')
+    HOST  = os.getenv('FLASK_HOST', '127.0.0.1')
     PORT  = int(os.getenv('FLASK_PORT', '5001'))
