@@ -100,8 +100,8 @@ def _trim_to_window(telemetry, start_time, end_time, pad_hours=0.5):
     if ts.dt.tz is not None:
         ts = ts.dt.tz_localize(None)
     trimmed = telemetry[(ts >= start - pad) & (ts <= end + pad)].copy()
-    print(f"[TRIM] {len(telemetry)} → {len(trimmed)} rows "
-          f"({start.strftime('%m-%d %H:%M')} → {end.strftime('%m-%d %H:%M')} ±{pad_hours}h)")
+    print(f"[TRIM] {len(telemetry)} -> {len(trimmed)} rows "
+          f"({start.strftime('%m-%d %H:%M')} -> {end.strftime('%m-%d %H:%M')} +/-{pad_hours}h)")
     return trimmed
 
 
@@ -143,8 +143,8 @@ def _resample_battery(df: pd.DataFrame, interval: str = RESAMPLE_INTERVAL) -> pd
     orig_max  = df['battery_n'].max()
     clean_min = result['battery_n'].min()
     clean_max = result['battery_n'].max()
-    print(f"[RESAMPLE] {len(df)} → {len(result)} rows ({interval} median) | "
-          f"{orig_min:.1f}–{orig_max:.1f}% → {clean_min:.1f}–{clean_max:.1f}%")
+    print(f"[RESAMPLE] {len(df)} -> {len(result)} rows ({interval} median) | "
+          f"{orig_min:.1f}-{orig_max:.1f}% -> {clean_min:.1f}-{clean_max:.1f}%")
     return result
 
 
@@ -223,7 +223,7 @@ def transform_battery_from_clean(clean_df: pd.DataFrame) -> dict:
         'charge_cycles_today': 0,
     }
     if clean_df.empty or 'battery_n' not in clean_df.columns:
-        print("[BATTERY] clean_df empty — returning zero KPIs")
+        print("[BATTERY] clean_df empty - returning zero KPIs")
         return empty
 
     # Build a minimal telemetry-like DataFrame that BatteryTransformer expects:
@@ -265,7 +265,7 @@ class BatteryAttributor:
 
         batt = clean_df['battery_n']
         print(f"[ATTRIBUTOR] Ready: {len(clean_df)} 1-min buckets | "
-              f"battery {batt.min():.1f}%–{batt.max():.1f}%")
+              f"battery {batt.min():.1f}%-{batt.max():.1f}%")
 
         self._compute(clean_df, missions)
 
@@ -659,7 +659,7 @@ from(bucket: "device_core")
             print(f"[NAME MAP] Could not fetch endpointId for {device_id[:8]}: {e}")
             name = device_id[:8]
         self._device_name_map[device_id] = name
-        print(f"[NAME MAP] {device_id[:8]} → {name}")
+        print(f"[NAME MAP] {device_id[:8]} -> {name}")
         return name
 
     def _sum_discharge_only(self, battery_series, timestamps=None):
@@ -777,11 +777,11 @@ from(bucket: "device_core")
             for dev in devices:
                 try:
                     name = self._get_device_name(dev)
-                    print(f"🔥 Pre-warming {name}...")
+                    print(f"[PREWARM] Pre-warming {name}...")
                     self.fetch_dashboard_data(dev, force_refresh=True)
                 except Exception as e:
                     name = self._get_device_name(dev)
-                    print(f"⚠️  Pre-warm failed {name}: {e}")
+                    print(f"[WARN] Pre-warm failed {name}: {e}")
         threading.Thread(target=warm, daemon=True).start()
         return devices
 
@@ -792,7 +792,7 @@ from(bucket: "device_core")
         while True:
             with self._cache_lock:
                 if not force_refresh and cache_key in self._cache:
-                    print(f"⚡ Cache HIT {device_id[:8]}...")
+                    print(f"[CACHE] Cache HIT {device_id[:8]}...")
                     return self._cache[cache_key]
                 if cache_key not in self._in_progress:
                     self._in_progress.add(cache_key)
@@ -800,7 +800,7 @@ from(bucket: "device_core")
             time.sleep(0.1)    
         
 
-        print(f"🔄 Cache MISS — loading {device_id[:8]}...")
+        print(f"[CACHE] Cache MISS - loading {device_id[:8]}...")
         try:
             raw        = self.data_loader.load_data_for_device(device_id, start_date, end_date)
             missions   = raw['missions']
@@ -887,14 +887,14 @@ from(bucket: "device_core")
         
         with self._cache_lock:
             if cache_key in self._raw_cache:
-                print(f"⚡ Mission cache HIT {device_id[:8]}...")
+                print(f"[CACHE] Mission cache HIT {device_id[:8]}...")
                 raw = self._raw_cache[cache_key]
             else:
                 raw = None
 
 
         if raw is None:
-            print(f"🔄 Mission cache MISS — loading {device_id[:8]}...")
+            print(f"[CACHE] Mission cache MISS - loading {device_id[:8]}...")
             raw = self.data_loader.load_data_for_device(device_id)
             with self._cache_lock:
                 self._raw_cache[cache_key] = raw
@@ -919,7 +919,7 @@ from(bucket: "device_core")
         mission_telemetry = self.mission_extractor.filter_telemetry_by_mission(
             telemetry, mission_start, mission_end, device_id)
 
-        print(f"[MISSION] idx={mission_index}  {mission_start} → {mission_end}")
+        print(f"[MISSION] idx={mission_index}  {mission_start} -> {mission_end}")
         print(f"[MISSION] telemetry in window: {len(mission_telemetry)}")
 
         mission_battery     = self._attributor_cache[device_id].get(mission_index)

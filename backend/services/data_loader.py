@@ -51,7 +51,7 @@ class PostgreSQLLoader:
 
     def __init__(self):
         self.engine = create_engine(Config.DATABASE_URL)
-        print(f"📊 PostgreSQL connected: {Config.DATABASE['database']}")
+        print(f"[DATA] PostgreSQL connected: {Config.DATABASE['database']}")
 
     def get_latest_data_range(self, device_id):
         query = text("""
@@ -66,7 +66,7 @@ class PostgreSQLLoader:
                 return latest - timedelta(hours=24), latest
             return None, None
         except Exception as e:
-            print(f"⚠️  Error finding latest data: {e}")
+            print(f"[WARN] Error finding latest data: {e}")
             return None, None
 
     def load_missions(self, device_id, start_time=None, end_time=None, limit=None):
@@ -95,10 +95,10 @@ class PostgreSQLLoader:
             params = {"device": device_id}
         try:
             df = pd.read_sql(query, self.engine, params=params)
-            print(f"✅ PostgreSQL: {len(df)} missions loaded")
+            print(f"[OK] PostgreSQL: {len(df)} missions loaded")
             return df
         except Exception as e:
-            print(f"❌ Error loading missions: {e}")
+            print(f"[ERROR] Error loading missions: {e}")
             return pd.DataFrame()
 
     def get_mission_counts(self, device_id):
@@ -111,7 +111,7 @@ class PostgreSQLLoader:
         try:
             return pd.read_sql(query, self.engine, params={"device": device_id})
         except Exception as e:
-            print(f"❌ Error getting mission counts: {e}")
+            print(f"[ERROR] Error getting mission counts: {e}")
             return pd.DataFrame()
 
     def get_devices(self):
@@ -123,10 +123,10 @@ class PostgreSQLLoader:
         try:
             df      = pd.read_sql(query, self.engine)
             devices = df["deviceId"].tolist()
-            print(f"📱 Found {len(devices)} devices in PostgreSQL")
+            print(f"[DEVICES] Found {len(devices)} devices in PostgreSQL")
             return devices
         except Exception as e:
-            print(f"❌ Error fetching devices: {e}")
+            print(f"[ERROR] Error fetching devices: {e}")
             return []
 
     def close(self):
@@ -152,11 +152,11 @@ class InfluxDBLoader:
             self.bucket = cfg['bucket']
             health = self.client.health()
             if health.status == "pass":
-                print(f"📡 InfluxDB connected: bucket={self.bucket}")
+                print(f"[INFLUX] InfluxDB connected: bucket={self.bucket}")
             else:
-                print(f"⚠️  InfluxDB health: {health.status}")
+                print(f"[WARN] InfluxDB health: {health.status}")
         except Exception as e:
-            print(f"❌ InfluxDB connection failed: {e}")
+            print(f"[ERROR] InfluxDB connection failed: {e}")
             self.client    = None
             self.query_api = None
 
@@ -173,11 +173,11 @@ class InfluxDBLoader:
 
     def load_telemetry(self, device_id: str, start_time, end_time) -> pd.DataFrame:
         if self.query_api is None:
-            print("⚠️  InfluxDB not connected, returning empty telemetry")
+            print("[WARN] InfluxDB not connected, returning empty telemetry")
             return pd.DataFrame()
 
         if not _DEVICE_ID_PATTERN.match(device_id):
-            print(f"❌ InfluxDB: rejected malformed device_id: {device_id!r}")
+            print(f"[ERROR] InfluxDB: rejected malformed device_id: {device_id!r}")
             return pd.DataFrame()
 
         start_str = self._to_utc_rfc3339(start_time)
@@ -225,8 +225,8 @@ class InfluxDBLoader:
                     })
 
             if not records:
-                print(f"⚠️  InfluxDB: no telemetry records found for {device_id[:8]} in range")
-                print(f"   Range: {start_str} → {end_str}")
+                print(f"[WARN] InfluxDB: no telemetry records found for {device_id[:8]} in range")
+                print(f"   Range: {start_str} -> {end_str}")
                 return pd.DataFrame()
 
             raw = pd.DataFrame(records)
@@ -236,7 +236,7 @@ class InfluxDBLoader:
             # Deduplicate before pivot
             raw = raw.drop_duplicates(subset=["ts", "deviceId", "_field"], keep="last")
 
-            print(f"📡 InfluxDB raw records: {len(raw)} | fields: {sorted(raw['_field'].unique())}")
+            print(f"[INFLUX] InfluxDB raw records: {len(raw)} | fields: {sorted(raw['_field'].unique())}")
 
             # FIX 2: Use pivot (faster, cleaner than pivot_table)
             df = raw.pivot_table(
@@ -254,11 +254,11 @@ class InfluxDBLoader:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
 
-            print(f"✅ InfluxDB: {len(df)} telemetry rows | columns: {list(df.columns)}")
+            print(f"[OK] InfluxDB: {len(df)} telemetry rows | columns: {list(df.columns)}")
             return df
 
         except Exception as e:
-            print(f"❌ InfluxDB query failed: {e}")
+            print(f"[ERROR] InfluxDB query failed: {e}")
             import traceback
             traceback.print_exc()
             return pd.DataFrame()
@@ -273,10 +273,10 @@ class InfluxDBLoader:
         try:
             tables  = self.query_api.query(flux_query, org=self.org)
             devices = [r.get_value() for t in tables for r in t.records if r.get_value()]
-            print(f"📱 InfluxDB: found {len(devices)} device(s) via tagValues")
+            print(f"[DEVICES] InfluxDB: found {len(devices)} device(s) via tagValues")
             return devices
         except Exception as e:
-            print(f"⚠️  Could not fetch InfluxDB device list: {e}")
+            print(f"[WARN] Could not fetch InfluxDB device list: {e}")
             return []
 
     def close(self):
@@ -310,14 +310,14 @@ class DataLoaderService:
         pg_devices  = self.postgres.get_devices()
         inf_devices = self.influx.get_devices()
         all_devices = list(dict.fromkeys(pg_devices + inf_devices))
-        print(f"📱 Total unique devices: {len(all_devices)}")
+        print(f"[DEVICES] Total unique devices: {len(all_devices)}")
         return all_devices
 
     def load_data_for_device(self, device_id: str,
                              start_date: str = None, end_date: str = None) -> dict:
 
         print("\n" + "=" * 60)
-        print(f"📊 Loading data for device: {device_id}")
+        print(f"[DATA] Loading data for device: {device_id}")
         print("=" * 60)
 
         # ── Date range: custom override vs auto-window ───────────────
@@ -325,7 +325,7 @@ class DataLoaderService:
             # User-specified range: load ALL missions in that date span
             start_time = pd.Timestamp(start_date).normalize()
             end_time   = pd.Timestamp(end_date).normalize() + timedelta(hours=23, minutes=59, seconds=59)
-            print(f"📅 Custom range: {start_date} → {end_date}")
+            print(f"[RANGE] Custom range: {start_date} -> {end_date}")
             missions_df = self.postgres.load_missions(device_id, start_time, end_time)
 
             # Normalise timestamps
@@ -341,11 +341,11 @@ class DataLoaderService:
             # InfluxDB telemetry for custom range
             influx_start = start_time - timedelta(hours=1)
             influx_end   = end_time   + timedelta(hours=1)
-            print(f"\n📡 Loading telemetry from InfluxDB (custom range)...")
+            print(f"\n[INFLUX] Loading telemetry from InfluxDB (custom range)...")
             telemetry_df = self.influx.load_telemetry(device_id, influx_start, influx_end)
             print(f"   Telemetry records: {len(telemetry_df)}")
 
-            print("\n" + "=" * 60 + "\n✅ Data loading complete\n" + "=" * 60 + "\n")
+            print("\n" + "=" * 60 + "\n[OK] Data loading complete\n" + "=" * 60 + "\n")
             return {
                 "missions":   missions_df,
                 "telemetry":  telemetry_df,
@@ -356,17 +356,17 @@ class DataLoaderService:
 
         # ── Auto-window (default) ────────────────────────────────────
         start_time, end_time = self.window.calculate_24h_window()
-        print(f"⏰ Window: {start_time.strftime('%Y-%m-%d %H:%M')} → "
+        print(f"[WINDOW] Window: {start_time.strftime('%Y-%m-%d %H:%M')} -> "
               f"{end_time.strftime('%Y-%m-%d %H:%M')}")
 
-        print("\n📋 Loading missions from PostgreSQL...")
+        print("\n[MISSIONS] Loading missions from PostgreSQL...")
         missions_df = self.postgres.load_missions(device_id, start_time, end_time)
 
         if missions_df.empty:
-            print("⚠️  No missions in last 24h, searching for most recent 24h with data...")
+            print("[WARN] No missions in last 24h, searching for most recent 24h with data...")
             recent_start, recent_end = self.postgres.get_latest_data_range(device_id)
             if recent_start and recent_end:
-                print(f"✅ Using: {recent_start.strftime('%Y-%m-%d %H:%M')} → "
+                print(f"[OK] Using: {recent_start.strftime('%Y-%m-%d %H:%M')} -> "
                       f"{recent_end.strftime('%Y-%m-%d %H:%M')}")
                 start_time  = recent_start
                 end_time    = recent_end
@@ -380,10 +380,10 @@ class DataLoaderService:
                 ).tz_convert(None)          # was: tz_localize (wrong — already UTC-aware)
                 hours_ago = (pd.Timestamp.now() - latest_mission).total_seconds() / 3600
                 if hours_ago > 24:
-                    print(f"⚠️  Latest mission is {hours_ago:.0f} hours old, re-fetching latest window...")
+                    print(f"[WARN] Latest mission is {hours_ago:.0f} hours old, re-fetching latest window...")
                     recent_start, recent_end = self.postgres.get_latest_data_range(device_id)
                     if recent_start and recent_end:
-                        print(f"✅ Using: {recent_start.strftime('%Y-%m-%d %H:%M')} → "
+                        print(f"[OK] Using: {recent_start.strftime('%Y-%m-%d %H:%M')} -> "
                               f"{recent_end.strftime('%Y-%m-%d %H:%M')}")
                         start_time  = recent_start
                         end_time    = recent_end
@@ -403,11 +403,11 @@ class DataLoaderService:
         # ── InfluxDB: telemetry ─────────────────────────────────────
         influx_start = start_time - timedelta(hours=1)
         influx_end   = end_time   + timedelta(hours=1)
-        print(f"\n📡 Loading telemetry from InfluxDB...")
+        print(f"\n[INFLUX] Loading telemetry from InfluxDB...")
         telemetry_df = self.influx.load_telemetry(device_id, influx_start, influx_end)
 
         if telemetry_df.empty:
-            print("⚠️  No telemetry in window, trying ±6h buffer...")
+            print("[WARN] No telemetry in window, trying +/-6h buffer...")
             telemetry_df = self.influx.load_telemetry(
                 device_id,
                 start_time - timedelta(hours=6),
@@ -418,10 +418,10 @@ class DataLoaderService:
         if not telemetry_df.empty and 'battery' in telemetry_df.columns:
             batt = pd.to_numeric(telemetry_df['battery'], errors='coerce').dropna()
             if not batt.empty:
-                print(f"   Battery range: {batt.min():.1f}% – {batt.max():.1f}%")
+                print(f"   Battery range: {batt.min():.1f}% - {batt.max():.1f}%")
 
         print("\n" + "=" * 60)
-        print("✅ Data loading complete")
+        print("[OK] Data loading complete")
         print("=" * 60 + "\n")
 
         return {
@@ -448,11 +448,11 @@ if __name__ == "__main__":
 
     service = DataLoaderService()
     devices = service.load_device_list()
-    print(f"\n📱 Devices: {devices[:3]}")
+    print(f"\n[DEVICES] Devices: {devices[:3]}")
 
     if devices:
         data = service.load_data_for_device(devices[0])
-        print(f"\n📊 Results for {devices[0]}:")
+        print(f"\n[DATA] Results for {devices[0]}:")
         print(f"   Missions:  {len(data['missions'])}")
         print(f"   Telemetry: {len(data['telemetry'])}")
         if not data['telemetry'].empty:
@@ -461,4 +461,4 @@ if __name__ == "__main__":
                 print(f"   DeviceIds: {data['telemetry']['deviceId'].unique().tolist()}")
 
     service.close()
-    print("\n✅ Test complete")
+    print("\n[OK] Test complete")
