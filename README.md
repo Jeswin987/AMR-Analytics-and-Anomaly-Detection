@@ -113,8 +113,8 @@ explain_anomaly.py <mission_id>  : on-demand, human-readable score breakdown
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Jeswin987/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/Jeswin987/AMR-Analytics-and-Anomaly-Detection.git
+cd AMR-Analytics-and-Anomaly-Detection
 
 # 2. Create a virtual environment
 python -m venv venv
@@ -314,7 +314,7 @@ Not in place: authentication on any API route, a Content Security Policy, and an
 ## Project Structure
 
 ```
-<repo-name>/
+AMR-Analytics-and-Anomaly-Detection/
 ├── run.py                              Entry point: starts Flask dashboard
 ├── requirements.txt                    Python dependencies
 ├── .env                                Secrets (NOT committed)
