@@ -377,7 +377,7 @@ def test_readiness_never_propagates_an_escaped_probe(monkeypatch):
     route has no try/except by design. An escape becomes a 500, and under
     FLASK_DEBUG the debugger renders the DSN password into the body.
     """
-    secret = "dsn=postgresql://postgres:hunter2@10.0.0.5/AMR_Prod"
+    secret = "dsn=postgresql://postgres:hunter2@10.0.0.5/testdb"
 
     def escaping(*a, **k):
         raise RuntimeError(secret)
