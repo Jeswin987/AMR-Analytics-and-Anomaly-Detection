@@ -67,10 +67,15 @@ external InfluxDB and can produce a restart loop. So the two concerns are split.
   the database is reachable and answering. It does not exercise the application's shared pool;
   that is accepted.
 - **InfluxDB probe:** a fresh `InfluxDBClient(..., timeout=<ms>)`, then `ping()` for reachability,
-  then `buckets_api().find_bucket_by_name(Config.INFLUXDB['bucket'])` to force an authenticated
-  call. `/ping` is declared `auth_settings=[]` in influxdb-client 1.50.0, so it sends no
-  credentials and a wrong or expired token would otherwise report `up`. A fresh client is used
-  because the boot-time client may be `None` and carries a 10 second timeout.
+  then `buckets_api().find_bucket_by_name(Config.INFLUXDB['bucket'])` to force a call the server
+  actually checks. The InfluxDB *server* does not enforce authorization on `/ping`, so a wrong or
+  expired token would otherwise report `up`. (Corrected 2026-10-30: an earlier draft said the
+  client sends no credentials on `/ping` because the generated service declares
+  `auth_settings=[]`. That is wrong — a wire capture shows `Authorization: Token ...` is sent on
+  `/ping`, and `buckets_service` declares `auth_settings=[]` too. The two-call design is right;
+  the reason was not. Do not drop the bucket lookup on the strength of that declaration.)
+  A fresh client is used because the boot-time client may be `None` and carries a 10 second
+  timeout.
 - `ping()` swallows every exception and returns a bare `False`, so `timeout` is distinguished from
   `unreachable` by elapsed time against the budget.
 - Probes run sequentially. Worst case ~4s, acceptable at monitor frequency.

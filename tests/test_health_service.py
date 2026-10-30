@@ -191,19 +191,81 @@ def test_check_influx_unhealthy_when_token_rejected(monkeypatch):
     assert result == {"status": "down", "reason": REASON_UNHEALTHY}
 
 
-def test_check_influx_unhealthy_with_empty_token(monkeypatch):
-    """Config defaults INFLUX_TOKEN to "", so an unconfigured install must
-    never be reported as up: /ping is unauthenticated and would say otherwise."""
+def test_check_influx_unhealthy_with_empty_token_without_any_io(monkeypatch):
+    """
+    Config defaults INFLUX_TOKEN to "", so an unconfigured install must never
+    report up -- the server does not check the token on /ping and would say
+    otherwise. An empty token is knowably wrong without a round trip, so this
+    also asserts no client is constructed at all.
+    """
     monkeypatch.setitem(health_service.Config.INFLUXDB, "token", "")
-    rejected = Exception("(401) Reason: unauthorized access")
-    _patch_influx_client(
-        monkeypatch, _FakeInfluxClient(ping=True, bucket_raises=rejected)
-    )
+
+    def no_client_allowed(**kwargs):
+        raise AssertionError("constructed a client for an empty token")
+
+    monkeypatch.setattr(health_service, "InfluxDBClient", no_client_allowed)
 
     result = check_influx()
 
-    assert result["status"] != "up"
-    assert result["reason"] == REASON_UNHEALTHY
+    assert result == {"status": "down", "reason": REASON_UNHEALTHY}
+
+
+def test_check_influx_timeout_never_zero(monkeypatch):
+    """
+    urllib3 guards its timeout with a truthiness test, so a 0 falls through to
+    "no timeout at all" -- the same trap as libpq connect_timeout=0. A probe
+    with no timeout waits on the OS default (measured at 21s).
+    """
+    recorder = {}
+    _patch_influx_client(
+        monkeypatch, _FakeInfluxClient(ping=True, bucket=object()), recorder=recorder
+    )
+
+    check_influx(timeout_s=0.0)
+
+    assert recorder["timeout"] >= 1
+
+
+def test_check_influx_pins_retries_off(monkeypatch):
+    """Already the library default; pinned so an upgrade cannot change it."""
+    recorder = {}
+    _patch_influx_client(
+        monkeypatch, _FakeInfluxClient(ping=True, bucket=object()), recorder=recorder
+    )
+
+    check_influx()
+
+    assert recorder["retries"] is False
+
+
+def test_check_influx_divides_timeout_by_resolved_addresses(monkeypatch):
+    """
+    urllib3 applies its timeout per connection attempt and create_connection
+    walks every resolved address, so a 2-address host would otherwise take
+    2 x budget. Two calls share the budget, hence budget/2/addresses.
+    """
+    recorder = {}
+    monkeypatch.setattr(health_service, "_address_count", lambda url: 2)
+    _patch_influx_client(
+        monkeypatch, _FakeInfluxClient(ping=True, bucket=object()), recorder=recorder
+    )
+
+    check_influx(timeout_s=2.0)
+
+    assert recorder["timeout"] == 500
+
+
+def test_check_influx_logs_when_ping_returns_false(monkeypatch, capsys):
+    """
+    ping() swallows its exception and sends the detail to a logger nothing in
+    backend/ configures, so without a print here the most likely failure mode
+    in production leaves no server-side record at all.
+    """
+    _patch_influx_client(monkeypatch, _FakeInfluxClient(ping=False))
+
+    check_influx()
+
+    assert "influxdb ping failed" in capsys.readouterr().out
 
 
 def test_check_influx_closes_client_on_failure(monkeypatch):
@@ -216,16 +278,22 @@ def test_check_influx_closes_client_on_failure(monkeypatch):
     assert client.closed is True
 
 
-def test_check_influx_passes_timeout_in_milliseconds(monkeypatch):
-    """The influxdb-client timeout parameter is milliseconds, not seconds."""
+def test_check_influx_splits_the_budget_across_its_two_calls_in_milliseconds(monkeypatch):
+    """
+    The timeout parameter is milliseconds, not seconds, and the probe makes two
+    server calls that must fit one budget together -- so a 2.0s budget gives
+    each call 1000ms, not 2000ms. (Divided again by resolved address count;
+    pinned to 1 here so this test is about the unit and the split only.)
+    """
     recorder = {}
+    monkeypatch.setattr(health_service, "_address_count", lambda url: 1)
     _patch_influx_client(
         monkeypatch, _FakeInfluxClient(ping=True, bucket=object()), recorder=recorder
     )
 
     check_influx(timeout_s=2.0)
 
-    assert recorder["timeout"] == 2000
+    assert recorder["timeout"] == 1000
 
 
 # --------------------------------------------------------------------------
@@ -301,3 +369,87 @@ def test_reason_vocabulary_is_closed(monkeypatch):
         _patch_probes(monkeypatch, {"status": "down", "reason": reason}, _UP)
         body, _ = check_readiness()
         assert body["checks"]["postgresql"]["reason"] in allowed
+
+
+def test_readiness_never_propagates_an_escaped_probe(monkeypatch):
+    """
+    The no-leak guarantee rests on nothing escaping this module, because the
+    route has no try/except by design. An escape becomes a 500, and under
+    FLASK_DEBUG the debugger renders the DSN password into the body.
+    """
+    secret = "dsn=postgresql://postgres:hunter2@10.0.0.5/AMR_Prod"
+
+    def escaping(*a, **k):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(health_service, "check_postgres", escaping)
+    monkeypatch.setattr(health_service, "check_influx", lambda *a, **k: _UP)
+
+    body, code = check_readiness()
+
+    assert code == 503
+    assert secret not in repr(body)
+    assert body["checks"]["postgresql"] == {
+        "status": "down",
+        "reason": REASON_UNREACHABLE,
+    }
+
+
+# --------------------------------------------------------------------------
+# Escape paths found in review
+# --------------------------------------------------------------------------
+
+def test_dispose_failure_does_not_discard_the_sanitised_result(monkeypatch):
+    """
+    A raise in the finally block replaces the already-built return value. The
+    probe had correctly classified the failure; dispose() threw it away.
+    """
+    class _DisposeRaises(_FakeEngine):
+        def dispose(self):
+            raise RuntimeError("dsn=postgresql://postgres:hunter2@db")
+
+    _patch_create_engine(
+        monkeypatch, engine=_DisposeRaises(on_connect=OSError("refused"))
+    )
+
+    result = check_postgres()
+
+    assert result == {"status": "down", "reason": REASON_UNREACHABLE}
+
+
+def test_non_ascii_exception_text_does_not_escape_the_probe(monkeypatch):
+    """
+    Exception text is locale-influenced. Interpolating it raw into a print
+    raises UnicodeEncodeError on a cp1252 stdout -- the bug class already in
+    docs/known_issues.md -- and that escapes past the sanitised return.
+    """
+    _patch_create_engine(monkeypatch, raises=OSError("szőlő refused"))
+
+    result = check_postgres()
+
+    assert result["status"] == "down"
+    assert health_service._ascii("szőlő").isascii()
+
+
+def test_check_postgres_unhealthy_when_server_refuses_credentials(monkeypatch):
+    """
+    A rotated password must not read as "unreachable": that sends the operator
+    to check firewalls while the server is up and refusing the login.
+    """
+    class _Orig:
+        pgcode = "28P01"   # invalid_password
+
+    rejected = OSError("password authentication failed")
+    rejected.orig = _Orig()
+    _patch_create_engine(monkeypatch, raises=rejected)
+
+    result = check_postgres()
+
+    assert result == {"status": "down", "reason": REASON_UNHEALTHY}
+
+
+def test_budget_is_floored_above_zero(monkeypatch):
+    """0 and negatives read as "no limit" to libpq and urllib3, not "no wait"."""
+    assert health_service._budget(0.0) > 0
+    assert health_service._budget(-5) > 0
+    assert health_service._budget("not-a-number") == 2.0

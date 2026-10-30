@@ -181,10 +181,10 @@ Construct the client with `timeout=int(budget * 1000)` — the influxdb-client `
 in **milliseconds**, not seconds. Call `ping()` first: a `False` result means `REASON_UNREACHABLE`,
 or `REASON_TIMEOUT` if elapsed has reached the budget. Then call
 `client.buckets_api().find_bucket_by_name(...)` with the configured bucket; a `None` result or any
-exception from this authenticated step maps to `REASON_UNHEALTHY`. `ping()` deliberately comes
-first and `health()` is never called, because `/ping` is unauthenticated and `HealthCheck.message`
-would carry raw server text. Log the real error `[ERROR]` server-side. Close the client in a
-`finally`.
+exception from this server-checked step maps to `REASON_UNHEALTHY`. `ping()` deliberately comes
+first and `health()` is never called, because the InfluxDB server does not check the token on
+`/ping` and `HealthCheck.message` would carry raw server text. Log the real error `[ERROR]`
+server-side. Close the client in a `finally`.
 
 - [ ] **Step 4: Run tests to verify they pass**
 

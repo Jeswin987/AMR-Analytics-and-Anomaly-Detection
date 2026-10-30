@@ -36,6 +36,6 @@ Open items. Background: `docs/project_review_2026-08-11.md` and recent commit hi
 - ~~**`GET /api/health` reports `ok` while InfluxDB is down.**~~ Fixed 2026-10-30. `/api/health` is
   now liveness only (`{"status": "alive"}`, no I/O) and `GET /api/ready` live-probes both
   dependencies with a bounded timeout, reports each separately, and returns 503 when either is
-  down. The InfluxDB probe follows `ping()` with an authenticated bucket lookup, because `/ping`
-  is unauthenticated and would report `up` for a wrong or expired token. See
+  down. The InfluxDB probe follows `ping()` with a bucket lookup, because the InfluxDB server does
+  not check the token on `/ping` and would report `up` for a wrong or expired one. See
   `backend/services/health_service.py` and `docs/superpowers/specs/2026-10-30-health-readiness-design.md`.
