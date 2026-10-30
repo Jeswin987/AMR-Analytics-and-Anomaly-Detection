@@ -1,4 +1,4 @@
-# Known issues — as of 2026-10-29
+# Known issues — as of 2026-10-30
 
 Open items. Background: `docs/project_review_2026-08-11.md` and recent commit history.
 

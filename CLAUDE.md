@@ -63,7 +63,7 @@ Optional: `FLASK_HOST` (default `127.0.0.1`), `FLASK_PORT` (`5001`), `FLASK_DEBU
 
 ## Known issues
 
-See `docs/known_issues.md` (last reviewed 2026-10-29).
+See `docs/known_issues.md` (last reviewed 2026-10-30).
 
 ## Don't
 

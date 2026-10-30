@@ -67,3 +67,6 @@ htmlcov/
 node_modules/
 *.bak
 patch_*.py
+
+# ── Claude Code (local, per-machine settings) ─────────────────────
+.claude/settings.local.json
