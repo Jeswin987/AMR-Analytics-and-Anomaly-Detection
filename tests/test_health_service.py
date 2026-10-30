@@ -15,6 +15,7 @@ from backend.services.health_service import (
     REASON_UNREACHABLE,
     check_influx,
     check_postgres,
+    check_readiness,
 )
 
 
@@ -225,3 +226,78 @@ def test_check_influx_passes_timeout_in_milliseconds(monkeypatch):
     check_influx(timeout_s=2.0)
 
     assert recorder["timeout"] == 2000
+
+
+# --------------------------------------------------------------------------
+# Aggregation
+# --------------------------------------------------------------------------
+
+def _patch_probes(monkeypatch, postgres, influx):
+    calls = []
+
+    def fake_postgres(*a, **kw):
+        calls.append("postgresql")
+        return postgres
+
+    def fake_influx(*a, **kw):
+        calls.append("influxdb")
+        return influx
+
+    monkeypatch.setattr(health_service, "check_postgres", fake_postgres)
+    monkeypatch.setattr(health_service, "check_influx", fake_influx)
+    return calls
+
+
+_UP = {"status": "up", "latency_ms": 3}
+
+
+def test_readiness_ready_when_both_up(monkeypatch):
+    _patch_probes(monkeypatch, _UP, _UP)
+
+    body, code = check_readiness()
+
+    assert code == 200
+    assert body["status"] == "ready"
+    assert set(body["checks"]) == {"postgresql", "influxdb"}
+
+
+def test_readiness_not_ready_when_postgres_down(monkeypatch):
+    _patch_probes(monkeypatch, {"status": "down", "reason": REASON_UNREACHABLE}, _UP)
+
+    body, code = check_readiness()
+
+    assert code == 503
+    assert body["status"] == "not_ready"
+
+
+def test_readiness_not_ready_when_influx_down(monkeypatch):
+    _patch_probes(monkeypatch, _UP, {"status": "down", "reason": REASON_UNHEALTHY})
+
+    body, code = check_readiness()
+
+    assert code == 503
+    assert body["status"] == "not_ready"
+
+
+def test_readiness_reports_both_reasons_when_both_down(monkeypatch):
+    """No short-circuit: a caller must learn the state of both dependencies."""
+    calls = _patch_probes(
+        monkeypatch,
+        {"status": "down", "reason": REASON_UNREACHABLE},
+        {"status": "down", "reason": REASON_UNHEALTHY},
+    )
+
+    body, code = check_readiness()
+
+    assert code == 503
+    assert body["checks"]["postgresql"]["reason"] == REASON_UNREACHABLE
+    assert body["checks"]["influxdb"]["reason"] == REASON_UNHEALTHY
+    assert calls == ["postgresql", "influxdb"]
+
+
+def test_reason_vocabulary_is_closed(monkeypatch):
+    allowed = {REASON_UNREACHABLE, REASON_TIMEOUT, REASON_UNHEALTHY}
+    for reason in list(allowed):
+        _patch_probes(monkeypatch, {"status": "down", "reason": reason}, _UP)
+        body, _ = check_readiness()
+        assert body["checks"]["postgresql"]["reason"] in allowed

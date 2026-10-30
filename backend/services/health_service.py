@@ -125,3 +125,20 @@ def check_influx(timeout_s=None):
                 client.close()
             except Exception:
                 pass
+
+
+def check_readiness():
+    """
+    Probe every dependency and return (response_body, http_status).
+
+    Both probes always run; there is no short-circuit on the first failure, so
+    one request always reports the state of every dependency. The status is 200
+    only when all of them are up.
+    """
+    checks = {
+        "postgresql": check_postgres(),
+        "influxdb":   check_influx(),
+    }
+    ready = all(check["status"] == STATUS_UP for check in checks.values())
+    body  = {"status": "ready" if ready else "not_ready", "checks": checks}
+    return body, (200 if ready else 503)
