@@ -1,0 +1,4 @@
+# Development-only dependencies — not required to run the app.
+#   pip install -r requirements-dev.txt
+# Pinned with == for reproducibility (requirements.txt still uses >=).
+pytest==8.3.4

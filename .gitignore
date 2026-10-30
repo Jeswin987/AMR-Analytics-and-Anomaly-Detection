@@ -70,3 +70,6 @@ patch_*.py
 
 # ── Claude Code (local, per-machine settings) ─────────────────────
 .claude/settings.local.json
+
+# -- Superpowers plan scratch (ledger, briefs, review packages)
+.superpowers/
