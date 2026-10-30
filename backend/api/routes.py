@@ -4,6 +4,7 @@ from backend.services.analytics_service import (
     fetch_device_list, fetch_dashboard_data,
     fetch_mission_data, clear_cache, get_device_name,
 )
+from backend.services.health_service import check_readiness
 import traceback
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -74,3 +75,15 @@ def cache_clear():
 @api_bp.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'alive'})
+
+@api_bp.route('/ready', methods=['GET'])
+def ready():
+    """
+    Readiness: live-probes every dependency and returns 503 if any is down.
+
+    There is deliberately no try/except here. check_readiness() never raises
+    and already returns sanitised, closed-vocabulary reasons; catching at this
+    layer would reintroduce the str(e) leak this endpoint exists to avoid.
+    """
+    body, status = check_readiness()
+    return jsonify(body), status
