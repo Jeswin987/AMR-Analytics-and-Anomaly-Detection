@@ -8,14 +8,15 @@ Anomaly detection: scikit-learn IsolationForest, trained offline.
 
 - `run.py` → `backend.app:create_app()` → serves on `FLASK_HOST:FLASK_PORT` (`.env`).
 - Dev: `python run.py`. Production is NOT yet set up (no gunicorn wrapper).
-- Health check: `GET /api/health`.
+- Liveness: `GET /api/health` (no I/O). Readiness: `GET /api/ready` (live-probes PostgreSQL + InfluxDB, 503 if either is down).
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `backend/app.py` | Flask factory, blueprint registration |
-| `backend/api/routes.py` | HTTP routes (`/api/devices`, `/api/data/<id>`, `/api/mission/...`, `/api/cache/clear`) |
+| `backend/api/routes.py` | HTTP routes (`/api/devices`, `/api/data/<id>`, `/api/mission/...`, `/api/cache/clear`, `/api/health`, `/api/ready`) |
+| `backend/services/health_service.py` | Readiness probes; imports only `Config`, never `analytics_service` |
 | `backend/services/analytics_service.py` | Core business logic — battery, utilization, caching, device-name map |
 | `backend/services/data_loader.py` | SQL + Flux queries, parameterized |
 | `backend/transformers/trizlabz_transformer.py` | `ChargeCycleDetector`, utilization transforms |
@@ -29,7 +30,7 @@ Anomaly detection: scikit-learn IsolationForest, trained offline.
 
 All runtime secrets come from `.env` at repo root (gitignored). Required keys:
 `DATABASE_URL`, `DB_PASSWORD`, `INFLUX_TOKEN`, `INFLUX_ORG`, `INFLUX_BUCKET`.
-Optional: `FLASK_HOST` (default `127.0.0.1`), `FLASK_PORT` (`5001`), `FLASK_DEBUG` (`false`), `HOURS_WINDOW` (`24`).
+Optional: `FLASK_HOST` (default `127.0.0.1`), `FLASK_PORT` (`5001`), `FLASK_DEBUG` (`false`), `HOURS_WINDOW` (`24`), `HEALTH_TIMEOUT_SECONDS` (`2.0`).
 
 ## ML pipeline
 
@@ -40,7 +41,8 @@ Optional: `FLASK_HOST` (default `127.0.0.1`), `FLASK_PORT` (`5001`), `FLASK_DEBU
 ## Conventions
 
 - Python 3.12+ (`venv/` present but gitignored).
-- No test suite exists. Do not assume CI; verify changes manually.
+- Tests: `pip install -r requirements-dev.txt`, then `python -m pytest` (config in `pytest.ini`). Coverage is health/readiness only — the rest of the app is still verified manually. Do not assume CI.
+- `tests/conftest.py` sets `DATABASE_URL`/`DB_PASSWORD`/`INFLUX_URL` before importing `backend`, because `config.py` raises at import and `analytics_service` does network I/O at import. Keep that ordering.
 - All DB queries use parameterized bindings (`data_loader.py:57-80` is the template to follow).
 - Frontend data interpolated into DOM via `escapeHtml()` helper (`static/js/dashboard.js:37`). Follow that pattern for any new `innerHTML` assignments touching server data.
 - Caching: `analytics_service.py` uses an in-process dict guarded by `_cache_lock`. Keys shaped `f"{device_id}|{start}|{end}"`.
