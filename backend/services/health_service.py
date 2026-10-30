@@ -16,6 +16,7 @@ the real error goes to the server log instead.
 """
 import time
 
+from influxdb_client import InfluxDBClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
@@ -77,3 +78,50 @@ def check_postgres(timeout_s=None):
     finally:
         if engine is not None:
             engine.dispose()
+
+
+def check_influx(timeout_s=None):
+    """
+    Probe InfluxDB for reachability and then for credentials. Never raises.
+
+    Two calls, because one is not enough. /ping is declared with
+    auth_settings=[] in influxdb-client, so it sends no credentials and returns
+    204 for any reachable server -- an expired or wrong token would still look
+    "up". The bucket lookup that follows is authenticated, so it is what
+    actually validates INFLUX_TOKEN.
+
+    health() is deliberately never called: its HealthCheck.message carries raw
+    server text, and the surest way not to leak that is never to fetch it.
+    """
+    budget    = _budget(timeout_s)
+    started   = time.monotonic()
+    client    = None
+    reachable = False
+    try:
+        client = InfluxDBClient(
+            url=Config.INFLUXDB["url"],
+            token=Config.INFLUXDB["token"],
+            org=Config.INFLUXDB["org"],
+            timeout=int(budget * 1000),   # influxdb-client takes milliseconds
+        )
+        if not client.ping():
+            # ping() swallows its own exception and returns a bare False, so
+            # elapsed time is the only way to tell a timeout from a refusal.
+            return _down(REASON_TIMEOUT if _exhausted(started, budget) else REASON_UNREACHABLE)
+        reachable = True
+
+        if client.buckets_api().find_bucket_by_name(Config.INFLUXDB["bucket"]) is None:
+            print("[WARN] readiness: influxdb bucket missing or not visible to this token")
+            return _down(REASON_UNHEALTHY)
+        return _up(started)
+    except Exception as e:
+        print(f"[ERROR] readiness: influxdb probe failed: {e}")
+        if _exhausted(started, budget):
+            return _down(REASON_TIMEOUT)
+        return _down(REASON_UNHEALTHY if reachable else REASON_UNREACHABLE)
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass

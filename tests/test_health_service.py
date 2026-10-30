@@ -13,6 +13,7 @@ from backend.services.health_service import (
     REASON_TIMEOUT,
     REASON_UNHEALTHY,
     REASON_UNREACHABLE,
+    check_influx,
     check_postgres,
 )
 
@@ -108,3 +109,119 @@ def test_connect_timeout_never_zero(monkeypatch):
     check_postgres(timeout_s=0.4)
 
     assert recorder["connect_args"]["connect_timeout"] >= 1
+
+
+# --------------------------------------------------------------------------
+# InfluxDB probe
+# --------------------------------------------------------------------------
+
+class _FakeBucketsApi:
+    def __init__(self, bucket=None, raises=None):
+        self._bucket = bucket
+        self._raises = raises
+
+    def find_bucket_by_name(self, name):
+        if self._raises is not None:
+            raise self._raises
+        return self._bucket
+
+
+class _FakeInfluxClient:
+    """Stands in for InfluxDBClient, recording close() calls."""
+
+    def __init__(self, ping=True, bucket=None, bucket_raises=None):
+        self._ping = ping
+        self._buckets = _FakeBucketsApi(bucket=bucket, raises=bucket_raises)
+        self.closed = False
+
+    def ping(self):
+        return self._ping
+
+    def buckets_api(self):
+        return self._buckets
+
+    def close(self):
+        self.closed = True
+
+
+def _patch_influx_client(monkeypatch, client, recorder=None):
+    def fake_client(**kwargs):
+        if recorder is not None:
+            recorder.update(kwargs)
+        return client
+
+    monkeypatch.setattr(health_service, "InfluxDBClient", fake_client)
+    return client
+
+
+def test_check_influx_up_when_ping_and_bucket_succeed(monkeypatch):
+    _patch_influx_client(monkeypatch, _FakeInfluxClient(ping=True, bucket=object()))
+
+    result = check_influx()
+
+    assert result["status"] == "up"
+    assert result["latency_ms"] >= 0
+
+
+def test_check_influx_unreachable_when_ping_false(monkeypatch):
+    _patch_influx_client(monkeypatch, _FakeInfluxClient(ping=False))
+
+    result = check_influx()
+
+    assert result == {"status": "down", "reason": REASON_UNREACHABLE}
+
+
+def test_check_influx_unhealthy_when_bucket_missing(monkeypatch):
+    _patch_influx_client(monkeypatch, _FakeInfluxClient(ping=True, bucket=None))
+
+    result = check_influx()
+
+    assert result == {"status": "down", "reason": REASON_UNHEALTHY}
+
+
+def test_check_influx_unhealthy_when_token_rejected(monkeypatch):
+    rejected = Exception("(401) Reason: unauthorized access")
+    _patch_influx_client(
+        monkeypatch, _FakeInfluxClient(ping=True, bucket_raises=rejected)
+    )
+
+    result = check_influx()
+
+    assert result == {"status": "down", "reason": REASON_UNHEALTHY}
+
+
+def test_check_influx_unhealthy_with_empty_token(monkeypatch):
+    """Config defaults INFLUX_TOKEN to "", so an unconfigured install must
+    never be reported as up: /ping is unauthenticated and would say otherwise."""
+    monkeypatch.setitem(health_service.Config.INFLUXDB, "token", "")
+    rejected = Exception("(401) Reason: unauthorized access")
+    _patch_influx_client(
+        monkeypatch, _FakeInfluxClient(ping=True, bucket_raises=rejected)
+    )
+
+    result = check_influx()
+
+    assert result["status"] != "up"
+    assert result["reason"] == REASON_UNHEALTHY
+
+
+def test_check_influx_closes_client_on_failure(monkeypatch):
+    client = _patch_influx_client(
+        monkeypatch, _FakeInfluxClient(ping=True, bucket_raises=Exception("nope"))
+    )
+
+    check_influx()
+
+    assert client.closed is True
+
+
+def test_check_influx_passes_timeout_in_milliseconds(monkeypatch):
+    """The influxdb-client timeout parameter is milliseconds, not seconds."""
+    recorder = {}
+    _patch_influx_client(
+        monkeypatch, _FakeInfluxClient(ping=True, bucket=object()), recorder=recorder
+    )
+
+    check_influx(timeout_s=2.0)
+
+    assert recorder["timeout"] == 2000
