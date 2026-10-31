@@ -1,4 +1,4 @@
-# Known issues — as of 2026-10-30
+# Known issues — as of 2026-10-31
 
 Open items. Background: `docs/project_review_2026-08-11.md` and recent commit history.
 
@@ -6,9 +6,29 @@ Open items. Background: `docs/project_review_2026-08-11.md` and recent commit hi
   `cache_clear` in `backend/api/routes.py` return `str(e)` to the client.
 - **`POST /api/cache/clear` is unauthenticated.** The `cache_clear` handler has no CSRF
   protection or auth.
-- **Unsynchronized device-name cache.** `AnalyticsService._get_device_name`
-  (`backend/services/analytics_service.py`) reads and writes `_device_name_map` outside
-  `_cache_lock`.
+- **Cache access is only partly synchronized.** In `backend/services/analytics_service.py`:
+  - `clear_cache()` mutates `_cache`, `_raw_cache` and `_attributor_cache` without taking
+    `_cache_lock`, racing the locked readers and writers in `fetch_dashboard_data`.
+  - `_attributor_cache` is never guarded: it is written in `fetch_dashboard_data` and read and
+    written in `fetch_mission_data` outside the lock.
+  - `AnalyticsService._get_device_name` reads and writes `_device_name_map` outside
+    `_cache_lock`.
+  - Per-device clearing matches `k.startswith(device_id)`, ignoring the `|` key separator, so
+    clearing device `ab` also clears every device whose ID starts with `ab`. It also leaves
+    `_last_key[device_id]` pointing at the evicted key.
+- **Device-name lookup ignores `INFLUX_BUCKET`.** `_get_device_name`
+  (`backend/services/analytics_service.py`) hardcodes `from(bucket: "device_core")` in its Flux
+  query instead of using `Config.INFLUXDB['bucket']`, so a non-default bucket silently yields
+  fallback names.
+- **A rejected device ID returns 200, not 400.** When `InfluxDBLoader.load_telemetry`
+  (`backend/services/data_loader.py`) rejects an ID against `_DEVICE_ID_PATTERN`, it logs and
+  returns an empty DataFrame. `GET /api/data/<id>` then answers HTTP 200 with empty telemetry
+  data, so the client cannot tell a malformed ID from a device with no telemetry.
+- **The app starts without `INFLUX_TOKEN`.** `Config.INFLUXDB['token']` (`backend/config.py`)
+  defaults to `''` rather than raising like `DATABASE_URL` and `DB_PASSWORD`. Only `/api/ready`
+  notices, by reporting InfluxDB down.
+- **Unused import.** `transform_hourly_energy` is imported in
+  `backend/services/analytics_service.py` and never used.
 - **`requirements.txt` is not reproducible.** Uses `>=` rather than `==`.
 - **Stale one-shot patch scripts.** `patch_dashboard_xss.py` and `patch_small_fixes.py` in the
   repo root are already applied; safe to delete.
