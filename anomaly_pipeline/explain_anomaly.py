@@ -34,11 +34,11 @@ import joblib
 import pandas as pd
 
 from feature_extractor import load_and_prepare
+from pipeline_paths import SCORES_FILE
 from rule_based_detector import ERROR_THRESHOLDS, rule_label
 
 MODEL_DIR = Path(__file__).resolve().parent.parent / "backend" / "ml"
 FEATURES_FILE = Path(__file__).resolve().parent.parent / "ml_features_v3.csv"
-SCORES_FILE = Path(__file__).resolve().parent.parent / "anomaly_scores_294.csv"
 
 ROBUST_FEATURES = {"duration_efficiency"}  # use median/MAD instead of mean/std
 MAD_SCALE_CONSTANT = 0.6745  # makes MAD-based z comparable to a normal-distribution std

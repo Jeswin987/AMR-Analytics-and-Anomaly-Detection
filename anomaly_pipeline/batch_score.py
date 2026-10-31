@@ -23,10 +23,11 @@ import joblib
 
 from feature_extractor import load_and_prepare
 from anomaly_scorer import score_batch
+from pipeline_paths import SCORES_FILE
 
 FEATURES_FILE = Path(__file__).resolve().parent.parent / "ml_features_v3.csv"
 MODEL_DIR = Path(__file__).resolve().parent.parent / "backend" / "ml"
-OUTPUT_FILE = Path(__file__).resolve().parent.parent / "anomaly_scores_294.csv"
+OUTPUT_FILE = SCORES_FILE
 
 
 def main():
