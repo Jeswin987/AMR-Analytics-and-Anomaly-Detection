@@ -1,0 +1,12 @@
+# .gitleaks.toml — gitleaks config for this repo.
+# Extends the built-in rules with one the defaults lack.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "influxdb-api-token"
+description = "InfluxDB API token (88-char base64url ending in ==)"
+# 86 base64url chars + "==", not embedded in a longer base64url run.
+regex = '''(?:^|[^A-Za-z0-9_-])([A-Za-z0-9_-]{86}==)(?:[^A-Za-z0-9_=-]|$)'''
+secretGroup = 1

@@ -1,0 +1,5 @@
+# .gitleaksignore — findings reviewed and accepted. One fingerprint per line.
+
+# InfluxDB API token in the initial commit's project review doc. The token is
+# revoked (verified: the server answers 401 to it). It remains in history only.
+aa2b27cf51dbff265dca026f653eed3bdab327c9:project_review_2026-08-11.md:influxdb-api-token:165
