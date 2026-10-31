@@ -1,0 +1,14 @@
+# Offline analysis & validation dependencies — not required to run the app.
+#   pip install -r requirements-analysis.txt
+# Minimums match the versions verified in the project venv.
+-r requirements.txt
+
+# anomaly_pipeline/held_out_validation.py, seed_stability_test.py
+scipy>=1.18.0
+
+# analysis/correlation_analysis.py (VIF check)
+statsmodels>=0.14.6
+
+# analysis/correlation_analysis.py (correlation heatmap)
+matplotlib>=3.11.1
+seaborn>=0.13.2
