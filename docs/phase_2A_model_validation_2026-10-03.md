@@ -144,8 +144,8 @@ known by construction.
 - **Mean detection rate across all features/magnitudes/directions: 32.3%.**
 - Strongly asymmetric by direction — e.g., `distance_m` decreasing: 90% detected;
   `distance_m` increasing: 16% detected, same magnitudes.
-- Detection rates were *identical* at 3, 5, and 8 SD for every single feature/direction
-  — investigated further in Test 5.
+- Detection rates were *identical* at 3, 5, and 8 SD for every feature/direction except
+  `hour_of_day` decreasing (32% / 38% / 38%) — investigated further in Test 5.
 - Weakest combinations (near the baseline's own 12% false-positive floor):
   `hour_of_day` increasing (6%), `distance_efficiency` increasing (14%),
   `pct_time_moving` increasing (14%).
