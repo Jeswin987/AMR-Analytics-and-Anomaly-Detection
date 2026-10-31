@@ -34,9 +34,8 @@ Optional: `FLASK_HOST` (default `127.0.0.1`), `FLASK_PORT` (`5001`), `FLASK_DEBU
 
 ## ML pipeline
 
-- Train: `python -m anomaly_pipeline.train_model` — fits `StandardScaler` on 292 missions, `IsolationForest(contamination=0.15, n_estimators=…, random_state=…)` on the 208 zero-error baseline subset. Writes `model.pkl` + `scaler.pkl` + `model_metadata.json`.
+- Train: `python anomaly_pipeline/train_model.py` (not `-m`: the scripts use bare sibling imports) — fits `StandardScaler` on 292 missions, `IsolationForest(contamination=0.15, n_estimators=…, random_state=…)` on the 208 zero-error baseline subset. Writes `model.pkl` + `scaler.pkl` + `model_metadata.json`.
 - Score: `anomaly_pipeline/batch_score.py`, `held_out_validation.py`.
-- `contamination=0.15` is a tuning choice, **not** a sklearn default — all historical scores depend on it.
 
 ## Conventions
 
@@ -65,11 +64,11 @@ Optional: `FLASK_HOST` (default `127.0.0.1`), `FLASK_PORT` (`5001`), `FLASK_DEBU
 
 ## Known issues
 
-See `docs/known_issues.md` (last reviewed 2026-10-30).
+See `docs/known_issues.md` (last reviewed 2026-10-31).
 
 ## Don't
 
 - Don't commit `.env`, `*.pkl`, `*.bak`, or files under `analysis/` with secrets.
 - Don't add fallbacks that silently swallow DB/Influx errors — surface them.
 - Don't add new `innerHTML` interpolations without `escapeHtml()`.
-- Don't change `CONTAMINATION` in `train_model.py` without re-scoring all historical missions and updating `model_metadata.json`.
+- Don't change `N_ESTIMATORS`, `RANDOM_STATE`, `IF_FEATURES`, `FEATURE_CAPS` (`train_model.py`) or `baseline_208_mission_ids.csv` without retraining AND re-scoring all missions; `IF_THRESHOLDS` changes need re-scoring. `CONTAMINATION` has no effect on scores or labels (we use `score_samples()`; see phase_2A validation Test 2).
